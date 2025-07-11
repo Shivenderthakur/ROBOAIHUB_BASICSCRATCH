@@ -17,7 +17,6 @@ from functools import partial
 from threading import Thread
 from kivy.clock import Clock
 
-# KV layout
 KV = '''
 <Block>:
     drag_rectangle: self.x, self.y, self.width, self.height
@@ -205,6 +204,20 @@ def track_loop(display, ser, app):
     last_cmd = None
     screen = app.root.get_screen('track')
 
+    def count_raised_fingers(hand_landmarks):
+        fingers = []
+        tips_ids = [4, 8, 12, 16, 20]
+        for i, tip_id in enumerate(tips_ids):
+            tip = hand_landmarks.landmark[tip_id]
+            base = hand_landmarks.landmark[tip_id - 2]
+            if i == 0:  # Thumb
+                if tip.x < base.x:
+                    fingers.append(1)
+            else:
+                if tip.y < base.y:
+                    fingers.append(1)
+        return len(fingers)
+
     while cap.isOpened() and app.tracking_active:
         ret, frame = cap.read()
         if not ret:
@@ -214,40 +227,49 @@ def track_loop(display, ser, app):
         img = frame
         res = hands.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
-        mov = 'center'
+        mov = 'CENTER'
         x_min, x_max = int(w * .35), int(w * .65)
         y_min, y_max = int(h * .35), int(h * .65)
+        gear = 'GEAR0'  # default
 
         if res.multi_hand_landmarks:
-            lm = res.multi_hand_landmarks[0].landmark[8]
+            hand_lms = res.multi_hand_landmarks[0]
+            lm = hand_lms.landmark[8]
             x, y, z = int(lm.x * w), int(lm.y * h), lm.z
-            if x < x_min:
-                mov = 'left'
-            elif x > x_max:
-                mov = 'right'
-            if y < y_min:
-                mov = 'up'
-            elif y > y_max:
-                mov = 'down'
-            if abs(z) > 0.2:
-                mov = 'forward' if z < -0.2 else 'backward'
 
-        cmd = display.get(mov.lower(), DEFAULT)
-        if True:
+            # Direction
+            if x < x_min:
+                mov = 'LEFT'
+            elif x > x_max:
+                mov = 'RIGHT'
+            if y < y_min:
+                mov = 'UP'
+            elif y > y_max:
+                mov = 'DOWN'
+            if abs(z) > 0.2:
+                mov = 'FORWARD' if z < -0.2 else 'BACKWARD'
+
+            # Gear
+            finger_count = count_raised_fingers(hand_lms)
+            gear = f'GEAR{finger_count}'
+        else:
+            gear = 'GEAR0'
+            mov = 'STOP'
+
+        combined_cmd = f'{gear},{mov}'
+        if ser and combined_cmd != last_cmd:
             try:
-                msg = (cmd.upper() + ';')
-                print("=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",msg)
+                msg = combined_cmd + ';'
+                print("=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", msg)
                 ser.write(msg.encode())
                 time.sleep(0.2)
-                last_cmd = cmd
+                last_cmd = combined_cmd
                 Clock.schedule_once(lambda dt: setattr(screen.ids.command_label, 'text', f"Command Sent: {msg}"))
-                print(f"Command Sent: {msg}")
             except Exception as e:
                 Clock.schedule_once(lambda dt: setattr(screen.ids.command_label, 'text', f"Command Error: {str(e)}"))
 
-        Clock.schedule_once(lambda dt: setattr(screen.ids.motion_label, 'text', f"Movement: {mov.upper()}"))
-
-        cv2.putText(img, cmd, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+        Clock.schedule_once(lambda dt: setattr(screen.ids.motion_label, 'text', f"Movement: {mov} | {gear}"))
+        cv2.putText(img, combined_cmd, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
         cv2.imshow('RoboAI', img)
 
         if cv2.waitKey(1) & 0xFF == 27 or not app.tracking_active:
