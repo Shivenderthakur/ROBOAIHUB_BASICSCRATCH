@@ -16,104 +16,7 @@ from kivy.lang import Builder
 from functools import partial
 from threading import Thread
 from kivy.clock import Clock
-
-KV = '''
-<Block>:
-    drag_rectangle: self.x, self.y, self.width, self.height
-    drag_distance: 0
-    drag_timeout: 1000000
-    size_hint: None, None
-    size: 100, 60
-    font_size: 18
-    background_color: 0.2, 0.6, 0.8, 1
-
-<ConfigScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        padding: 10
-        spacing: 10
-        BoxLayout:
-            orientation: 'horizontal'
-            spacing: 10
-            size_hint_y: None
-            height: 40
-            Spinner:
-                id: port_spinner
-                text: 'Select Bluetooth Device'
-                values: []
-            Button:
-                text: 'Refresh'
-                on_release: root.refresh_ports()
-            Button:
-                text: 'Start Tracking'
-                on_release: root.start_tracking()
-        FloatLayout:
-            id: config_area
-            Button:
-                id: tgt_up
-                text: root.display.get('up','UP')
-                size_hint: None, None
-                size: 130, 130
-                pos_hint: {'center_x': .5, 'center_y': .85}
-            Button:
-                id: tgt_down
-                text: root.display.get('down','DOWN')
-                size_hint: None, None
-                size: 130, 130
-                pos_hint: {'center_x': .5, 'center_y': .15}
-            Button:
-                id: tgt_left
-                text: root.display.get('right','RIGHT')
-                size_hint: None, None
-                size: 130, 130
-                pos_hint: {'center_x': .85, 'center_y': .5}
-            Button:
-                id: tgt_right
-                text: root.display.get('left','LEFT')
-                size_hint: None, None
-                size: 130, 130
-                pos_hint: {'center_x': .15, 'center_y': .5}
-            Block:
-                id: block_forward
-                text: 'FORWARD'
-                pos: (10, 10)
-            Block:
-                id: block_left
-                text: 'LEFT'
-                pos: (130, 10)
-            Block:
-                id: block_right
-                text: 'RIGHT'
-                pos: (250, 10)
-            Block:
-                id: block_backward
-                text: 'BACKWARD'
-                pos: (370, 10)
-
-<TrackScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        Label:
-            id: motion_label
-            text: 'Movement: NONE'
-            size_hint_y: None
-            height: 40
-        Label:
-            id: command_label
-            text: 'Command: NONE'
-            size_hint_y: None
-            height: 40
-        Button:
-            text: 'Stop and Back'
-            size_hint_y: None
-            height: 40
-            on_release: root.stop_tracking()
-'''
-
-Builder.load_string(KV)
-DIRECTIONS = ['up', 'down', 'left', 'right']
-DEFAULT = 'DEFAULT'
-
+from kivy.animation import Animation
 def list_outgoing_bt_ports():
     results = []
     friendly = {}
@@ -142,11 +45,222 @@ def list_outgoing_bt_ports():
         results.append((p.device, f"{p.device} - {name}"))
     return results
 
+
+# KV Layout
+KV = '''
+<Block>:
+    drag_rectangle: self.x, self.y, self.width, self.height
+    drag_distance: 0
+    drag_timeout: 1000000
+    size_hint: None, None
+    size: 160, 90
+    font_size: 20
+    color: 1, 1, 1, 1
+    canvas.before:
+        Color:
+            rgba: self.bg_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [20]
+        # Soft shadow
+        Color:
+            rgba: (0, 0, 0, 0.1)
+        Rectangle:
+            pos: self.x + 2, self.y - 2
+            size: self.size
+    on_press: self.animate_press()
+    on_release: self.animate_release()
+
+<ConfigScreen>:
+    canvas.before:
+        Color:
+            rgba: (0.98, 0.95, 0.85, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 30
+        spacing: 20
+
+        Label:
+            text: 'Scratch Visual Learning'
+            font_name: 'ComicRelief-Bold.ttf'
+            font_size: 36
+            color: (0.2, 0.5, 0.7, 1)
+            bold: True
+            size_hint_y: None
+            height: 80
+
+        BoxLayout:
+            orientation: 'horizontal'
+            spacing: 15
+            size_hint_y: None
+            height: 60
+
+            Spinner:
+                id: port_spinner
+                text: 'Choose Device'
+                values: []
+                font_size: 18
+                background_color: (0.95, 0.95, 0.75, 1)
+                color: (0.15, 0.15, 0.15, 1)
+                border: (16, 16, 16, 16)
+
+            Button:
+                text: 'Refresh'
+                size_hint_x: None
+                width: 120
+                font_size: 18
+                background_normal: ''
+                background_color: (0.6, 0.5, 0.8, 1)
+                color: (1, 1, 1, 1)
+                on_release: root.refresh_ports()
+
+            Button:
+                text: 'Start Magic!'
+                size_hint_x: None
+                width: 140
+                font_size: 18
+                background_normal: ''
+                background_color: (0.3, 0.7, 0.3, 1)
+                color: (1, 1, 1, 1)
+                on_release: root.start_tracking()
+
+        FloatLayout:
+            Label:
+                text: 'Drag the colorful blocks onto arrows'
+                font_size: 20
+                pos_hint: {'center_x': 0.5, 'top': 1}
+                color: (0.3, 0.3, 0.3, 1)
+
+            # Drop targets (arrows)
+            Button:
+                id: tgt_up
+                text: root.display['up']
+                size_hint: None, None
+                size: 160, 160
+                pos_hint: {'center_x': 0.5, 'center_y': 0.8}
+                background_normal: ''
+                background_color: (1, 0.9, 0.7, 1)
+                color: (0.1, 0.1, 0.1, 1)
+                on_release:
+                    Animation(size=(180, 180), duration=0.2, t='out_bounce').start(self)
+
+            Button:
+                id: tgt_down
+                text: root.display['down']
+                size_hint: None, None
+                size: 160, 160
+                pos_hint: {'center_x': 0.5, 'center_y': 0.2}
+                background_normal: ''
+                background_color: (1, 0.7, 0.9, 1)
+                color: (0.1, 0.1, 0.1, 1)
+                on_release:
+                    Animation(size=(180, 180), duration=0.2, t='out_bounce').start(self)
+
+            Button:
+                id: tgt_left
+                text: root.display['left']
+                size_hint: None, None
+                size: 160, 160
+                pos_hint: {'center_x': 0.2, 'center_y': 0.5}
+                background_normal: ''
+                background_color: (0.7, 0.9, 1, 1)
+                color: (0.1, 0.1, 0.1, 1)
+                on_release:
+                    Animation(size=(180, 180), duration=0.2, t='out_bounce').start(self)
+
+            Button:
+                id: tgt_right
+                text: root.display['right']
+                size_hint: None, None
+                size: 160, 160
+                pos_hint: {'center_x': 0.8, 'center_y': 0.5}
+                background_normal: ''
+                background_color: (0.9, 1, 0.7, 1)
+                color: (0.1, 0.1, 0.1, 1)
+                on_release:
+                    Animation(size=(180, 180), duration=0.2, t='out_bounce').start(self)
+
+            # Draggable blocks
+            Block:
+                id: block_forward
+                text: '\u27A1 Forward'
+                bg_color: 0.4, 0.6, 1, 1
+                pos: 20, 20
+
+            Block:
+                id: block_backward
+                text: '\u2B05 Back'
+                bg_color: 1, 0.4, 0.6, 1
+                pos: 200, 20
+
+            Block:
+                id: block_left
+                text: '\u2190 Left'
+                bg_color: 0.6, 1, 0.4, 1
+                pos: 380, 20
+
+            Block:
+                id: block_right
+                text: '\u27A1 Right'
+                bg_color: 1, 1, 0.4, 1
+                pos: 560, 20
+
+<TrackScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 20
+        spacing: 20
+
+        Label:
+            id: motion_label
+            text: 'Movement: NONE'
+            font_size: 24
+            color: (0.1, 0.3, 0.6, 1)
+            size_hint_y: None
+            height: 60
+
+        Label:
+            id: command_label
+            text: 'Command: NONE'
+            font_size: 20
+            color: (0.6, 0.2, 0.2, 1)
+            size_hint_y: None
+            height: 50
+
+        Button:
+            text: 'Stop & Back'
+            font_size: 18
+            background_normal: ''
+            background_color: (1, 0.5, 0.5, 1)
+            color: (1, 1, 1, 1)
+            size_hint_y: None
+            height: 60
+            on_release: root.stop_tracking()
+'''
+
+Builder.load_string(KV)
+
+# Supported gestures and directions
+DIRECTIONS = ['up', 'down', 'left', 'right', 'forward', 'backward']
+
+
+# Supported gestures and directions
+DIRECTIONS = ['up', 'down', 'left', 'right', 'forward', 'backward']
+
 class Block(DragBehavior, Button):
-    pass
+    bg_color = (0.2, 0.6, 0.8, 1)
+    def animate_press(self):
+        Animation(size=(self.width*0.9, self.height*0.9), duration=0.1).start(self)
+    def animate_release(self):
+        Animation(size=(120,60), duration=0.2, t='out_bounce').start(self)
 
 class ConfigScreen(Screen):
-    display = {}
+    display = {d:d.upper() for d in DIRECTIONS}
     ports = []
 
     def on_pre_enter(self):
@@ -154,28 +268,34 @@ class ConfigScreen(Screen):
 
     def refresh_ports(self):
         self.ports = list_outgoing_bt_ports()
-        self.ids.port_spinner.values = [p[1] for p in self.ports]
+        spinner = self.ids.port_spinner
+        spinner.values = [p[1] for p in self.ports]
+        spinner.text = spinner.values[0] if spinner.values else 'No Device'
 
     def on_touch_up(self, touch):
         super().on_touch_up(touch)
-        for blk, idkey in [('block_forward', 'up'), ('block_backward', 'down'), ('block_left', 'left'), ('block_right', 'right')]:
-            blk_widget = self.ids.get(blk)
-            if blk_widget and blk_widget.collide_point(*touch.pos):
-                for tgt in DIRECTIONS:
-                    btn = self.ids[f'tgt_{tgt}']
-                    if btn.collide_point(*touch.pos):
-                        self.display[tgt] = blk_widget.text
-                        btn.text = blk_widget.text
+        # detect which block was dragged
+        for block_id in ['block_forward', 'block_backward', 'block_left', 'block_right']:
+            blk = self.ids.get(block_id)
+            if blk and blk.collide_point(*touch.pos):
+                # drop onto any target
+                for dir_key in ['up','down','left','right']:
+                    tgt = self.ids.get(f'tgt_{dir_key}')
+                    if tgt and tgt.collide_point(*touch.pos):
+                        # assign custom label
+                        self.display[dir_key] = blk.text
+                        tgt.text = blk.text
+                        Animation(size=(160,160), duration=0.1, t='out_quad').start(tgt)
                         return
 
     def start_tracking(self):
-        selected = self.ids.port_spinner.text
-        port_tuple = next((p for p in self.ports if p[1] == selected), None)
-        ser = serial.Serial(port_tuple[0], 38400) if port_tuple else None
         app = App.get_running_app()
-        app.ser = ser
+        sel = self.ids.port_spinner.text
+        port = next((p[0] for p in self.ports if p[1]==sel), None)
+        app.ser = serial.Serial(port,38400) if port else None
+        app.display = self.display
         app.tracking_active = True
-        app.tracking_thread = Thread(target=partial(track_loop, self.display, ser, app), daemon=True)
+        app.tracking_thread = Thread(target=partial(track_loop, app.display, app.ser, app), daemon=True)
         app.tracking_thread.start()
         self.manager.current = 'track'
 
@@ -188,9 +308,10 @@ class TrackScreen(Screen):
         self.manager.current = 'config'
 
 class RoboAIApp(App):
+    ser = None
+    display = {}
     tracking_active = False
     tracking_thread = None
-    ser = None
 
     def build(self):
         sm = ScreenManager()
@@ -198,87 +319,54 @@ class RoboAIApp(App):
         sm.add_widget(TrackScreen(name='track'))
         return sm
 
+# Gesture & Serial Loop
+
 def track_loop(display, ser, app):
     hands = mp.solutions.hands.Hands(min_detection_confidence=0.7)
     cap = cv2.VideoCapture(0)
-    last_cmd = None
     screen = app.root.get_screen('track')
-
-    def count_raised_fingers(hand_landmarks):
-        fingers = []
-        tips_ids = [4, 8, 12, 16, 20]
-        for i, tip_id in enumerate(tips_ids):
-            tip = hand_landmarks.landmark[tip_id]
-            base = hand_landmarks.landmark[tip_id - 2]
-            if i == 0:  # Thumb
-                if tip.x < base.x:
-                    fingers.append(1)
-            else:
-                if tip.y < base.y:
-                    fingers.append(1)
-        return len(fingers)
+    last_cmd = None
 
     while cap.isOpened() and app.tracking_active:
         ret, frame = cap.read()
         if not ret:
             break
-
         h, w, _ = frame.shape
-        img = frame
+        img = frame.copy()
         res = hands.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
-        mov = 'CENTER'
-        x_min, x_max = int(w * .35), int(w * .65)
-        y_min, y_max = int(h * .35), int(h * .65)
-        gear = 'GEAR0'  # default
-
+        mov = 'stop'
+        gear = 'GEAR0'
         if res.multi_hand_landmarks:
-            hand_lms = res.multi_hand_landmarks[0]
-            lm = hand_lms.landmark[8]
-            x, y, z = int(lm.x * w), int(lm.y * h), lm.z
-
-            # Direction
-            if x < x_min:
-                mov = 'LEFT'
-            elif x > x_max:
-                mov = 'RIGHT'
-            if y < y_min:
-                mov = 'UP'
-            elif y > y_max:
-                mov = 'DOWN'
-            if abs(z) > 0.2:
-                mov = 'FORWARD' if z < -0.2 else 'BACKWARD'
-
-            # Gear
-            finger_count = count_raised_fingers(hand_lms)
-            gear = f'GEAR{finger_count}'
-        else:
-            gear = 'GEAR0'
-            mov = 'STOP'
-
-        combined_cmd = f'{gear},{mov}'
-        if ser and combined_cmd != last_cmd:
+            hand = res.multi_hand_landmarks[0]
+            lm8 = hand.landmark[8]
+            x, y, z = int(lm8.x*w), int(lm8.y*h), lm8.z
+            if x < w*0.35: mov='left'
+            elif x > w*0.65: mov='right'
+            if y < h*0.35: mov='up'
+            elif y > h*0.65: mov='down'
+            if abs(z)>0.2: mov='forward' if z< -0.2 else 'backward'
+            count = sum(
+                1 for i,tip in enumerate([4,8,12,16,20])
+                if (lm:=hand.landmark[tip]) and ((i==0 and lm.x<hand.landmark[tip-2].x) or (i>0 and lm.y<hand.landmark[tip-2].y))
+            )
+            gear = f'GEAR{count}'
+        mapped = display.get(mov, mov.upper())
+        cmd = f'{gear},{mapped}'
+        if True:
             try:
-                msg = combined_cmd + ';'
-                print("=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", msg)
-                ser.write(msg.encode())
-                time.sleep(0.2)
-                last_cmd = combined_cmd
-                Clock.schedule_once(lambda dt: setattr(screen.ids.command_label, 'text', f"Command Sent: {msg}"))
+                ser.write((cmd+';').encode())
+                last_cmd = cmd
+                Clock.schedule_once(lambda dt: setattr(screen.ids.command_label,'text',f"Sent: {cmd}"))
+                
             except Exception as e:
-                Clock.schedule_once(lambda dt: setattr(screen.ids.command_label, 'text', f"Command Error: {str(e)}"))
+                Clock.schedule_once(lambda dt: setattr(screen.ids.command_label,'text',f"Err: {e}"))
+        Clock.schedule_once(lambda dt: setattr(screen.ids.motion_label,'text',f"Movement: {mov.upper()} | {gear}"))
+        cv2.putText(img,cmd,(10,40),cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,255),2)
+        cv2.imshow('RoboAI',img)
+        if cv2.waitKey(1)&0xFF==27: break
+    cap.release(); cv2.destroyAllWindows()
+    if ser: ser.close()
 
-        Clock.schedule_once(lambda dt: setattr(screen.ids.motion_label, 'text', f"Movement: {mov} | {gear}"))
-        cv2.putText(img, combined_cmd, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-        cv2.imshow('RoboAI', img)
-
-        if cv2.waitKey(1) & 0xFF == 27 or not app.tracking_active:
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    if ser:
-        ser.close()
-
-if __name__ == '__main__':
+if __name__=='__main__':
     RoboAIApp().run()
+
