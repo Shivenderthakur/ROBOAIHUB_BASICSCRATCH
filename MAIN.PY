@@ -6,6 +6,7 @@ import time
 import serial.tools.list_ports
 import winreg
 from kivy.app import App
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.behaviors import DragBehavior
@@ -17,6 +18,24 @@ from functools import partial
 from threading import Thread
 from kivy.clock import Clock
 from kivy.animation import Animation
+from kivy.core.text import LabelBase
+
+
+from kivy.uix.boxlayout import BoxLayout
+from kivy.properties import StringProperty, ListProperty
+
+LabelBase.register(name='ComicRelief-Bold', fn_regular='assets/fonts/ComicRelief-Bold.ttf')
+
+class BlockWithIcon(DragBehavior, FloatLayout):
+    label = StringProperty("")
+    icon = StringProperty("")
+    bg_color = ListProperty([0.3, 0.3, 0.3, 1])
+
+    def animate_press(self):
+        Animation(scale=0.9, duration=0.1).start(self)
+
+    def animate_release(self):
+        Animation(scale=1.0, duration=0.2, t='out_bounce').start(self)
 def list_outgoing_bt_ports():
     results = []
     friendly = {}
@@ -45,9 +64,16 @@ def list_outgoing_bt_ports():
         results.append((p.device, f"{p.device} - {name}"))
     return results
 
+def on_touch_down(self, touch):
+    if self.collide_point(*touch.pos):
+        Animation(scale=0.95, duration=0.1).start(self)
+    return super().on_touch_down(touch)
 
+def on_touch_up(self, touch):
+    Animation(scale=1.0, duration=0.2, t='out_bounce').start(self)
+    return super().on_touch_up(touch)
 # KV Layout
-KV = '''
+KV = """
 <Block>:
     drag_rectangle: self.x, self.y, self.width, self.height
     drag_distance: 0
@@ -72,6 +98,38 @@ KV = '''
     on_press: self.animate_press()
     on_release: self.animate_release()
 
+<BlockWithIcon>:
+    drag_rectangle: self.x, self.y, self.width, self.height
+    drag_distance: 0
+    drag_timeout: 1000000
+    size_hint: None, None
+    size: 160, 100
+    icon: ''
+    label: ''
+    color: (0.13, 0.13, 0.13, 1)  # #A0D6FF
+
+    canvas.before:
+        Color:
+            rgba: self.bg_color
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [20]
+
+    Image:
+        source: root.icon
+        size_hint: None, None
+        size: 48, 48
+        pos_hint: {'center_x': 0.5, 'top': 1}
+
+    Label:
+        text: root.label
+        font_size: 16
+        bold: True
+        color: 1, 1, 1, 1
+        pos_hint: {'center_x': 0.5, 'y': 0}
+        size_hint: None, None
+        size: self.texture_size
 <ConfigScreen>:
     canvas.before:
         Color:
@@ -87,12 +145,20 @@ KV = '''
 
         Label:
             text: 'Scratch Visual Learning'
-            font_name: 'ComicRelief-Bold.ttf'
+            font_name: 'ComicRelief-Bold'
             font_size: 36
             color: (0.2, 0.5, 0.7, 1)
             bold: True
             size_hint_y: None
             height: 80
+
+        Image:
+            source: 'assets/images/logo.jfif'
+            allow_stretch: False
+            keep_ratio: True
+            size_hint_y: None
+            height: 100
+            pos_hint: {'center_x': 0.5}
 
         BoxLayout:
             orientation: 'horizontal'
@@ -136,7 +202,7 @@ KV = '''
                 pos_hint: {'center_x': 0.5, 'top': 1}
                 color: (0.3, 0.3, 0.3, 1)
 
-            # Drop targets (arrows)
+            # Drop targets
             Button:
                 id: tgt_up
                 text: root.display['up']
@@ -185,30 +251,34 @@ KV = '''
                 on_release:
                     Animation(size=(180, 180), duration=0.2, t='out_bounce').start(self)
 
-            # Draggable blocks
-            Block:
+            # Blocks
+            BlockWithIcon:
                 id: block_forward
-                text: '\u27A1 Forward'
-                bg_color: 0.4, 0.6, 1, 1
+                icon: 'assets/icons/forw.png'
+                label: 'Forward'
                 pos: 20, 20
+                bg_color: (0.627,0.839,1,1)
 
-            Block:
+            BlockWithIcon:
                 id: block_backward
-                text: '\u2B05 Back'
-                bg_color: 1, 0.4, 0.6, 1
-                pos: 200, 20
+                icon: 'assets/icons/back.png'
+                label: 'Back'
+                pos: 180, 20
+                bg_color: (0.627,0.839,1,1)
 
-            Block:
+            BlockWithIcon:
                 id: block_left
-                text: '\u2190 Left'
-                bg_color: 0.6, 1, 0.4, 1
-                pos: 380, 20
+                icon: 'assets/icons/left.png'
+                label: 'Left'
+                pos: 340, 20
+                bg_color: (0.627,0.839,1,1)
 
-            Block:
+            BlockWithIcon:
                 id: block_right
-                text: '\u27A1 Right'
-                bg_color: 1, 1, 0.4, 1
-                pos: 560, 20
+                icon: 'assets/icons/right.png'
+                label: 'Right'
+                pos: 500, 20
+                bg_color: (0.627,0.839,1,1)
 
 <TrackScreen>:
     BoxLayout:
@@ -241,7 +311,7 @@ KV = '''
             size_hint_y: None
             height: 60
             on_release: root.stop_tracking()
-'''
+"""
 
 Builder.load_string(KV)
 
@@ -283,8 +353,10 @@ class ConfigScreen(Screen):
                     tgt = self.ids.get(f'tgt_{dir_key}')
                     if tgt and tgt.collide_point(*touch.pos):
                         # assign custom label
-                        self.display[dir_key] = blk.text
-                        tgt.text = blk.text
+                        """self.display[dir_key] = blk.text
+                        tgt.text = blk.text"""
+                        self.display[dir_key] = blk.label
+                        tgt.text = blk.label
                         Animation(size=(160,160), duration=0.1, t='out_quad').start(tgt)
                         return
 
