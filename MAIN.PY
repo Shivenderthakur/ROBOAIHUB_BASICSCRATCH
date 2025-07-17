@@ -403,6 +403,8 @@ def track_loop(display, ser, app):
         ret, frame = cap.read()
         if not ret:
             break
+        frame = cv2.flip(frame, 1)
+        img = frame.copy()
         h, w, _ = frame.shape
         img = frame.copy()
         res = hands.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
